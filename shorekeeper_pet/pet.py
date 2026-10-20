@@ -22,7 +22,7 @@ from .presentation_size import EdgeResize
 from .media_library import load_catalog
 from .presets import load_defaults,default_bindings
 from .update_ui import UpdateController
-from .quota import quota_view,quota_label,quota_details,quota_items,refresh_seconds
+from .quota import quota_view,quota_label,quota_brief,quota_items,refresh_seconds
 
 SETTINGS=ROOT/'settings.json'
 STATES={
@@ -324,16 +324,19 @@ class Pet(PetRenderer,QWidget):
     def quota_label(self,compact=False):
         return quota_label(self.quota_data,compact)
 
-    def quota_details(self):
-        return '\n'.join(self.request_lines())+'\n\n'+quota_details(self.quota_data)
+    def tooltip_text(self):
+        return '\n'.join(self.request_lines()+quota_brief(self.quota_data))
 
     def request_lines(self):
         status=self.live_status; request=status.get('request')
-        lines=[f"最近需求：{request.get('title') or 'Claude'} · {request_text(request)}" if request else '最近需求：暂无（只统计你亲自发送的消息）']
-        if request and request.get('ended') and request.get('started'):
-            lines[0]+=f"（用时 {duration_text(request['ended']-request['started'])}）"
-        count=status.get('background_count',0)
-        if count: lines.append(f"后台自动任务：{count} 个会话运行中（{BACKGROUND_LABELS[self.options['background_turns']]}）")
+        if request:
+            title=request.get('title') or 'Claude'
+            if len(title)>22: title=title[:21]+'…'
+            line=f'{title} · {request_text(request)}'
+            if request.get('ended') and request.get('started'): line+=f" · 用时 {duration_text(request['ended']-request['started'])}"
+        else: line='还没有你发出的需求'
+        lines=[line]; count=status.get('background_count',0)
+        if count: lines.append(f"后台 {count} 个会话运行中（{BACKGROUND_LABELS[self.options['background_turns']]}）")
         return lines
 
     def quota_visibility(self):

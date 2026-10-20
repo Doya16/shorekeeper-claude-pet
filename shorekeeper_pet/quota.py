@@ -153,30 +153,24 @@ def source_lines(data):
     return lines
 
 
-def quota_details(data):
-    lines = [quota_label(data)]
-    for window in data.get('windows') or []:
-        reset = stamp(window['resets_at']) if window.get('resets_at') else '未提供'
-        lines.append(f"{window['label']} · 重置时间 {reset}")
-        if window['bucket'] == 'spend_limit' and finite(window.get('used_usd')) and finite(window.get('limit_usd')):
-            lines.append(f"网关支出：${window['used_usd']:g} / ${window['limit_usd']:g}（不是账户余额）")
-    context = data.get('context') or {}
-    if finite(context.get('remaining_percentage')):
-        lines.append(f"当前会话上下文剩余：{context['remaining_percentage']:g}%（不是套餐额度）")
-    cost = (data.get('cost') or {}).get('total_cost_usd')
-    if finite(cost):
-        lines.append(f"会话标价估算：${cost:.4f}（不代表实际扣款或余额）")
-    if data.get('model'):
-        lines.append('最近会话模型：'+data['model'])
-    lines += ['5 小时与每周限额独立计算，不能相加。',
-              '模型专属限额仅在接口返回时显示；额外用量余额未获取。']
+def quota_brief(data, now=None):
+    """Hover lines: only what the status bar itself cannot show."""
+    now = time.time() if now is None else now
     name, limit = SOURCES.get(data.get('source'), ('', 300))
-    if data.get('updated_at') and name:
-        lines.append(f"来源：{name} · 最近同步 {stamp(data['updated_at'], '%m/%d %H:%M:%S')}")
-    lines += [f'* 表示超过 {limit//60} 分钟未更新或读取失败；到期窗口等待重新同步。',
-              '刷新仅重读本机数据，不会读取账号凭据。',
-              '可在右键菜单打开 Claude 官方用量页面。']
-    return '\n'.join(lines)
+    if not data.get('updated_at') or not name:
+        return ['额度待同步：设置 → Claude 额度与提醒 查看来源']
+    short = '桌面版记录' if data.get('source') == 'desktop' else '状态栏'
+    stale = is_cached(data, now)
+    lines = [f"额度同步于 {stamp(data['updated_at'], '%H:%M')}（{short}）" +
+             (f' · 已超过 {limit//60} 分钟未更新' if stale else '')]
+    windows = list(live_windows(data, now))
+    resets = [f"{w['label']} {stamp(w['resets_at'])}" for w in windows if finite(w.get('resets_at'))]
+    if resets:
+        lines.append('重置：' + ' · '.join(resets))
+    for w in windows:
+        if w['bucket'] == 'spend_limit' and finite(w.get('used_usd')) and finite(w.get('limit_usd')):
+            lines.append(f"网关支出 ${w['used_usd']:g} / ${w['limit_usd']:g}（不是账户余额）")
+    return lines
 
 
 def refresh_seconds(data):

@@ -74,7 +74,7 @@ class PetRenderer:
             self.resize(neww,newh)
             if anchor:
                 self.move(round(anchor[0]-self.pet_rect.center().x()*self.scale_factor),round(anchor[1]-self.pet_rect.bottom()*self.scale_factor)); self.clamp_position()
-        self.setToolTip(self.quota_details()); self.update_bubble(); self.size_changed.emit()
+        self.setToolTip(self.tooltip_text()); self.update_bubble(); self.size_changed.emit()
 
     def update_bubble(self):
         if not hasattr(self,'bubble_rect'): return

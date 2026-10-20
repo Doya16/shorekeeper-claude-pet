@@ -1,5 +1,5 @@
 import time,unittest
-from shorekeeper_pet.quota import quota_from_status,quota_rows,quota_details
+from shorekeeper_pet.quota import quota_from_status,quota_rows,quota_brief
 from shorekeeper_pet.telemetry import sanitize
 
 class ClaudeQuotaTests(unittest.TestCase):
@@ -11,7 +11,7 @@ class ClaudeQuotaTests(unittest.TestCase):
         rows=quota_rows(data)
         self.assertEqual([r.remaining for r in rows],[0,85])
         self.assertEqual([r.bucket for r in rows],['five_hour','seven_day'])
-        self.assertIn('未获取',quota_details(data))
+        self.assertEqual(len(quota_brief(data)),1)
 
     def test_missing_is_unknown_and_expiry_is_not_100(self):
         self.assertIsNone(quota_rows(self.data())[0].remaining)
@@ -30,7 +30,7 @@ class ClaudeQuotaTests(unittest.TestCase):
     def test_gateway_cap_cannot_be_reported_as_balance(self):
         data=self.data(spend_limit={'used_percentage':40,'used_usd':4,'limit_usd':10})
         self.assertEqual(quota_rows(data)[0].remaining,60)
-        self.assertIn('不是账户余额',quota_details(data))
+        self.assertIn('不是账户余额','\n'.join(quota_brief(data)))
         self.assertNotIn('超限配额',quota_rows(data)[0].label)
 
 if __name__=='__main__':unittest.main()

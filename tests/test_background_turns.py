@@ -3,7 +3,7 @@ from datetime import datetime,timezone
 from unittest.mock import patch
 from shorekeeper_pet.bridge import SessionReader,Monitor,RateClient,turn_is_background
 from shorekeeper_pet.telemetry import sanitize
-from shorekeeper_pet.quota import quota_rows,quota_details,source_lines
+from shorekeeper_pet.quota import quota_rows,quota_brief,source_lines
 
 def stamp(second):return datetime.fromtimestamp(second,timezone.utc).isoformat()
 
@@ -112,7 +112,8 @@ class DesktopQuotaTests(unittest.TestCase):
         rows=quota_rows(data,now)
         self.assertEqual([(r.bucket,r.remaining) for r in rows],[('five_hour',61),('seven_day',100)])
         self.assertEqual(data['source'],'desktop');self.assertTrue(data['sources']['desktop']['available'])
-        self.assertIn('桌面版用量记录',quota_details(data));self.assertIn('未提供',quota_details(data))
+        brief=quota_brief(data,now);self.assertEqual(len(brief),1);self.assertIn('桌面版记录',brief[0]);self.assertNotIn('未更新',brief[0])
+        self.assertIn('已超过 20 分钟',quota_brief(data,now+1300)[0])
         self.assertNotIn('*',rows[0].label);self.assertIn('*',quota_rows(data,now+1300)[0].label)
         # Five hours later the sample no longer describes the current window.
         self.assertEqual([r.bucket for r in quota_rows(data,now+5*3600)],['seven_day'])
