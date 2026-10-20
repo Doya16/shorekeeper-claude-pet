@@ -1,9 +1,7 @@
-"""Live, persistent sizing controls shared by the quick dialog and preferences."""
+"""Live, persistent sizing control for the settings window."""
 import math
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget,QDialog,QVBoxLayout,QHBoxLayout,QLabel,QSlider,QSpinBox,QPushButton,QScrollArea
-from .appearance import stylesheet
-from .presentation_size import PresentationControl
+from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QLabel,QSlider,QSpinBox,QPushButton
 
 def normalize_scale(value):
     try: value=float(value)
@@ -42,14 +40,3 @@ class SizeControl(QWidget):
         text=f'当前显示：{self.pet.width()} × {self.pet.height()}（含额度条）'
         if self.pet.scale_factor+0.005<self.pet.requested_scale: text+=f' · 当前屏幕自动适配为 {self.pet.scale_factor:.0%}'
         self.info.setText(text)
-
-class SizeDialog(QDialog):
-    def __init__(self,pet):
-        super().__init__(None); self.pet=pet; self.setWindowTitle('守岸人 · 调整大小'); self.setWindowIcon(pet.icon); self.resize(600,620)
-        layout=QVBoxLayout(self); layout.setContentsMargins(20,20,20,20)
-        scroll=QScrollArea(); scroll.setWidgetResizable(True); body=QWidget(); body.setObjectName('settingsBody'); content=QVBoxLayout(body); scroll.setWidget(body); layout.addWidget(scroll)
-        title=QLabel('拖动滑块，直接看桌宠的变化'); content.addWidget(title)
-        self.control=SizeControl(pet); content.addWidget(self.control)
-        self.presentation_control=PresentationControl(pet); content.addWidget(self.presentation_control)
-        done=QPushButton('完成'); done.clicked.connect(self.hide); layout.addWidget(done); self.apply_style()
-    def apply_style(self): self.setStyleSheet(stylesheet(self.pet.options))

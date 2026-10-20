@@ -1,49 +1,41 @@
 # Shorekeeper for Claude
 
-A customizable Windows companion for Claude Code, with animated reactions, paired voice clips and captions, adjustable bubbles, and portable profiles.
+A customizable Windows companion for Claude Code: animated reactions to task progress, paired voice clips and captions, and an at-a-glance status bar showing whether your request is finished and how much usage is left.
 
-**v0.1.0 preview · Windows 10/11 x64**
+[Download for Windows](https://github.com/Doya16/shorekeeper-claude-pet/releases/latest) · [Chinese guide](docs/USAGE.md) · [中文说明](README.md)
 
-This preview implements the connection for terminal Claude Code and Code sessions inside Claude Desktop. Live account integration has not yet been verified. Ordinary desktop chat and Cowork are planned for later.
+![Working, finished (bars), finished (rings)](docs/demo/overview.png)
+
+**v0.1.0 · Windows 10/11 x64.** Works with Code sessions in Claude Desktop and with terminal Claude Code. Ordinary chat and Cowork are not supported yet. Python is not required.
 
 ## Start
 
-Extract `Shorekeeper-Claude-Windows-v0.1.0-preview.zip` completely and run `守岸人Claude桌宠启动.exe`. Python is not required.
+1. Extract `Shorekeeper-Claude-Windows-v0.1.0.zip` completely and run `守岸人Claude桌宠启动.exe`.
+2. **Claude Desktop Code sessions need no setup.** Task state comes from local session transcripts; usage comes from the desktop app's local usage samples.
+3. For terminal Claude Code only: right-click the pet → **设置… → Claude 额度与提醒** and enable the terminal connection (hooks plus status line), then start a new session. Claude Code 2.1.295 or later is recommended.
 
-When ready for live integration, right-click the pet, open **外观、声音与迁移 → 连接 Claude**, enable the Claude Code connection, and start a new Code session. Use Claude Code 2.1.295 or later and sign in through Claude. Connection and automatic startup are disabled by default.
+The pet reads local files only. It never reads credentials or sends model requests.
 
-## Customize
+## Request status
 
-- Assign GIF, WebP, PNG or JPEG artwork to each action.
-- Change looping, playback speed and hold duration.
-- Pick randomly from multiple voice clips, each with its own caption.
-- Play the thinking reminder once per task; choose how often idle reminders play.
-- Change fonts, font sizes and volume.
-- Resize the pet, bubbles and quota display with live previews and draggable edges.
-- Export all settings, artwork, fonts and audio, optionally including the Windows runtime.
+The request pill tracks only the latest message **you** sent: in progress (blue), finished (green) or failed (orange). Turns Claude starts by itself (background task results, schedules, Monitor events, sessions started by another session) are silent by default, so they no longer replay start and finish sounds. You can switch them to animation only, or to full reminders.
 
-Audio formats: WAV, MP3, OGG, FLAC, M4A and AAC. Font formats: TTF, OTF and TTC.
+## Status bar
 
-## Usage limits
+Five-hour, weekly and Fable weekly usage share one box, each with its own remaining-usage bar, or as rings with the percentage in the centre. Every item can be shown or hidden, and the settings page previews exactly what the pet draws.
 
-Five-hour and weekly remaining usage are shown separately when supplied by the [official Claude Code status line](https://code.claude.com/docs/en/statusline). Other windows are displayed only when returned. Context usage and estimated session cost are separate from plan limits; extra usage balance is not available.
+Usage comes from the Claude Desktop usage record (sampled about every 15 minutes) or the [Claude Code status line](https://code.claude.com/docs/en/statusline), whichever is newer. Fable usage appears only when Claude reports a Fable-specific window; today both sources report five-hour and weekly windows only. Missing values show as pending, and stale values carry a `*`.
 
-Missing data is shown as pending, expired windows wait for new data, and old values carry a cache marker. An existing custom status line is preserved; in that case only task events are connected. Desktop Code status-line reporting still needs live verification.
+## Menu and settings
+
+The right-click menu keeps only everyday actions: pat, tea, a **Claude & usage** submenu (open Claude, open the usage page, refresh usage), **Settings…**, hide and quit. All settings live in one window: General, Interaction studio, Fonts & size, Sound, Status bar, Claude usage & reminders, Save & transfer, and Version & updates.
 
 ## Profiles
 
-Use **保存与迁移** to save settings or export a ZIP containing your media and preferences. The full portable ZIP also includes the application. Credentials, conversations and usage caches are excluded. On a new computer, install and sign in to Claude separately.
-
-The preview has not been published as a stable GitHub release. Update notification support is retained and disabled by default.
+Settings save automatically. Export a settings snapshot, a profile ZIP with your media, or a full portable ZIP that includes the application. Credentials, conversations and usage caches are never included.
 
 ## Credits
 
-Artwork source: [emoji.wuwa.games](https://emoji.wuwa.games/).
-
-Community crowdfunding QQ group: **1079834905**.
-
-Thank you to all Shorekeeper fans who contributed to the emote crowdfunding.
+Artwork source: [emoji.wuwa.games](https://emoji.wuwa.games/). Community crowdfunding QQ group: **1079834905**. Thank you to all Shorekeeper fans who contributed to the emote crowdfunding.
 
 Character artwork and original voices belong to their respective rights holders. This is an unofficial fan companion, not an Anthropic or Kuro Games product. Component and font licenses are in `licenses/` and `THIRD_PARTY.txt`.
-
-[中文说明](README.md) · [Detailed Chinese guide](docs/USAGE.md)

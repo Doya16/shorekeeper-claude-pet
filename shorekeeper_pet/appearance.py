@@ -1,6 +1,6 @@
 import math
 from PySide6.QtGui import QFont,QFontDatabase
-DEFAULTS=dict(check_updates_on_start=False,ignored_update_version='',font_family='LXGW WenKai',bubble_font_family='ZCOOL KuaiLe',bubble_font_size=19,quota_font_size=17,ui_font_size=17,bubble_width=390,bubble_width_ratio=1.0,quota_scale=1.0,pet_size=230,volume=75,audio_enabled=False,audio_cooldown=12,audio_directory='audio',claude_home='',claude_executable='',launch_with_claude=False,claude_link_enabled=False)
+DEFAULTS=dict(check_updates_on_start=False,ignored_update_version='',font_family='LXGW WenKai',bubble_font_family='ZCOOL KuaiLe',bubble_font_size=19,quota_font_size=17,ui_font_size=17,bubble_width=390,bubble_width_ratio=1.0,quota_scale=1.0,pet_size=230,volume=75,audio_enabled=False,audio_cooldown=12,audio_directory='audio',claude_home='',claude_executable='',launch_with_claude=False,claude_link_enabled=False,background_turns='silent',quota_style='bars',status_show_request=True,quota_show_five_hour=True,quota_show_seven_day=True,quota_show_fable=True,quota_show_other=True)
 
 def load_fonts(root):
     families=[]
@@ -19,6 +19,9 @@ def appearance(settings):
         if not isinstance(result[key],str): result[key]=DEFAULTS[key]
     result['launch_with_claude']=result['launch_with_claude'] is True
     result['claude_link_enabled']=result['claude_link_enabled'] is True
+    if result['background_turns'] not in ('silent','animate','full'):result['background_turns']='silent'
+    if result['quota_style'] not in ('bars','rings'):result['quota_style']='bars'
+    for key in ('status_show_request','quota_show_five_hour','quota_show_seven_day','quota_show_fable','quota_show_other'):result[key]=result[key] is not False
     result['check_updates_on_start']=result['check_updates_on_start'] is not False
     if not isinstance(result['ignored_update_version'],str) or len(result['ignored_update_version'])>32:result['ignored_update_version']=''
     return result

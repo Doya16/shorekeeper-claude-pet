@@ -8,7 +8,7 @@ from .bubble_window import SpeechBubble
 from PySide6.QtWidgets import QApplication
 from .sizing import fitted_scale
 from .presentation_size import paint_grips
-from .quota import quota_rows
+from .status_panel import StatusPanel
 
 def wrap_text(text,metrics,width):
     lines=[]; line=''
@@ -33,14 +33,13 @@ class PetRenderer:
         self.quota_font=font(opts['font_family'],opts['quota_font_size'])
         size=opts['pet_size']
         self.quota_pet_factor=size/230
-        metrics=QFontMetrics(self.quota_font)
-        rows=quota_rows(self.quota_data)
-        self.quota_row_heights=[max(31,metrics.height()+10)+(8 if row.remaining is not None else 0) for row in rows]
-        bar_height=(sum(self.quota_row_heights)+4*(len(rows)-1))*self.quota_pet_factor
-        bar_width=min(230,max(146,max(metrics.horizontalAdvance(row.label) for row in rows)+28))*self.quota_pet_factor
+        # Layout and paint share one snapshot, so a window expiring in between cannot shift rows.
+        self.status_panel=StatusPanel(opts,*self.status_content())
+        bar_height=self.status_panel.height*self.quota_pet_factor
+        bar_width=self.status_panel.width*self.quota_pet_factor
         self.scale_factor=fitted_scale(self.requested_scale,size+8,size+bar_height+14,area.width(),area.height())
         self.quota_base_width=bar_width; self.quota_base_height=bar_height
-        self.quota_display_scale=min(opts['quota_scale'],(area.width()/self.scale_factor-8)/bar_width,(area.height()/self.scale_factor-size-14)/bar_height)
+        self.quota_display_scale=min(opts['quota_scale'],(area.width()/self.scale_factor-8)/max(1,bar_width),(area.height()/self.scale_factor-size-14)/max(1,bar_height))
         self.quota_display_scale=max(.1,self.quota_display_scale)
         bar_width*=self.quota_display_scale; bar_height*=self.quota_display_scale
         width=max(size,bar_width)+8; self.scene_width=width
@@ -111,22 +110,6 @@ class PetRenderer:
         p.setOpacity(1); self.last_image=frame
         p.save(); p.translate(self.quota_rect.topLeft()); quota_scale=self.quota_display_scale*self.quota_pet_factor; p.scale(quota_scale,quota_scale)
         bar=QRectF(0,0,self.quota_base_width/self.quota_pet_factor,self.quota_base_height/self.quota_pet_factor)
-        y=0
-        for index,view in enumerate(quota_rows(self.quota_data)):
-            # Expiry may happen between layout and paint; never invent a progress value.
-            height=self.quota_row_heights[min(index,len(self.quota_row_heights)-1)]
-            row=QRectF(0,y,bar.width(),height); y+=height+4
-            remaining=view.remaining; low=remaining is not None and remaining<20
-            p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor(20,43,77,50)); p.drawRoundedRect(row.translated(0,2),11,11)
-            p.setPen(QPen(QColor('#a67125' if low else '#6788b4'),1.6)); p.setBrush(QColor('#fff4de' if low else '#e1f3ff')); p.drawRoundedRect(row,11,11)
-            track=QRectF(row.left()+11,row.bottom()-9,row.width()-22,4)
-            p.setPen(Qt.PenStyle.NoPen)
-            if remaining is not None:
-                p.setBrush(QColor('#b6d3ed')); p.drawRoundedRect(track,2,2)
-                p.setBrush(QColor('#d99032' if low else '#6e9fd0')); p.drawRoundedRect(QRectF(track.left(),track.top(),track.width()*max(0,min(100,remaining))/100,track.height()),2,2)
-            label=view.label; label_font=QFont(self.quota_font)
-            available=row.width()-18; measured=QFontMetrics(label_font).horizontalAdvance(label)
-            if measured>available: label_font.setPixelSize(max(7,int(label_font.pixelSize()*available/measured)))
-            p.setFont(label_font); p.setPen(QColor('#744d13' if low else '#4f72a2'))
-            p.drawText(row.adjusted(9,3,-9,-11 if remaining is not None else -3),Qt.AlignmentFlag.AlignCenter,label)
-        paint_grips(p,bar,self.scale_factor*quota_scale); p.restore(); p.end()
+        self.status_panel.paint(p)
+        if not self.status_panel.empty(): paint_grips(p,bar,self.scale_factor*quota_scale)
+        p.restore(); p.end()

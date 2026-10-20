@@ -156,13 +156,8 @@ class UpdateController(QObject):
         self.dialog.show()  # Modeless: task animations, voice, and dragging keep working.
 
     def backup(self):
-        self.pet.open_preferences()
-        preferences = self.pet.preferences
-        for index in range(preferences.tabs.count()):
-            if preferences.tabs.tabText(index) == '保存与迁移':
-                preferences.tabs.setCurrentIndex(index)
-                break
-        preferences.export(False)
+        self.pet.open_preferences('transfer')
+        self.pet.preferences.export(False)
 
     def close(self):
         self.closed = True

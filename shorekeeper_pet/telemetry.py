@@ -12,6 +12,14 @@ def text(value, limit=160):
 def number(value):
     return value if isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) and value>=0 else None
 
+# Prompts Claude writes for itself: background task results, side sessions,
+# CI and schedule events, and the brief of a session started by another one.
+BACKGROUND_PREFIXES=('<task-notification>','<side-sessions-event>','<ci-monitor-event>','<scheduled-task','<system-reminder>',
+                     'Task (from the session that started this one)','Background (from the session that started this one)')
+
+def background_prompt(value):
+    return isinstance(value,str) and value.lstrip().startswith(BACKGROUND_PREFIXES)
+
 def phase(name):
     name=name.lower()
     if any(s in name for s in ('askuser','ask_user','permission','elicitation')):return 'waiting'
@@ -46,6 +54,8 @@ def sanitize(data, status=False, now=None):
     if data.get('agent_id'):return None
     item.update(kind='event',event=event,tool_name=text(data.get('tool_name')),notification_type=text(data.get('notification_type')),
                 error=text(data.get('error')),tool_use_id=text(data.get('tool_use_id')),prompt_id=text(data.get('prompt_id')))
+    # Keep only the classification; the prompt body never leaves the receiver.
+    if event=='UserPromptSubmit':item['origin']='background' if background_prompt(data.get('prompt')) else 'human'
     cwd=data.get('cwd')
     item['project']=text(pathlib.PureWindowsPath(cwd).name if isinstance(cwd,str) else '',80)
     return item

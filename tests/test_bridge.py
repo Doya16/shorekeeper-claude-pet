@@ -53,7 +53,7 @@ class BridgeTests(unittest.TestCase):
     def test_new_status_without_limits_clears_previous_limits(self):
         with tempfile.TemporaryDirectory() as folder:
             receive(dict(session_id='x',rate_limits={'five_hour':{'used_percentage':20}}),True,folder,now=100)
-            client=RateClient(store=folder);self.assertEqual(len(client.read()['windows']),1)
+            client=RateClient(store=folder,desktop=[]);self.assertEqual(len(client.read()['windows']),1)
             receive(dict(session_id='x'),True,folder,now=101)
             self.assertEqual(client.read()['windows'],[])
 

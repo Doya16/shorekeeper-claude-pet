@@ -13,11 +13,14 @@ from .media_library import IMAGE_FILTER,IMAGE_HELP,import_images
 import pathlib
 
 class BindingEditor(QDialog):
-    def __init__(self,pet,catalog,asset_table,root):
+    def __init__(self,pet,catalog,asset_table,root,embedded=False):
         super().__init__(None); self.pet=pet; self.catalog=catalog; self.assets=asset_table; self.root=root
         self.state='pet'; self.loading=False; self.preview_animation=None; self.preview_start=0; self.controls={}; self.guards={}
         self.setWindowTitle('守岸人 · 交互工作室'); self.setWindowIcon(pet.icon); self.resize(1100,900); self.setMinimumSize(840,570)
-        outer=QVBoxLayout(self); outer.setContentsMargins(20,16,20,16)
+        if embedded:
+            # Lives as a page of the settings window.
+            self.setWindowFlags(Qt.WindowType.Widget); self.setMinimumSize(680,480)
+        outer=QVBoxLayout(self); outer.setContentsMargins(*((4,0,4,0) if embedded else (20,16,20,16)))
         heading=QLabel('每一次回应，都可以是你喜欢的样子'); heading.setObjectName('studioHeading'); outer.addWidget(heading)
         outer.addWidget(QLabel('选择左侧状态，配置 GIF、节奏、气泡与语音。修改自动保存。'))
         body=QHBoxLayout(); outer.addLayout(body,1)
@@ -39,7 +42,7 @@ class BindingEditor(QDialog):
         self.import_button=QPushButton('导入图片…'); self.import_button.clicked.connect(self.import_assets); files.addWidget(self.import_button)
         self.directory_button=QPushButton('打开素材目录'); self.directory_button.clicked.connect(self.open_asset_directory); files.addWidget(self.directory_button)
         self.refresh_button=QPushButton('刷新素材'); self.refresh_button.clicked.connect(self.refresh_gallery); files.addWidget(self.refresh_button)
-        help_text=QLabel(IMAGE_HELP+'\n复制到目录后点“刷新素材”，即可预览并选中。音频请在“语音与配对气泡”添加（WAV/MP3/OGG/FLAC/M4A/AAC）；字体在外观设置添加（TTF/OTF/TTC）。'); help_text.setWordWrap(True); gifbox.addWidget(help_text)
+        help_text=QLabel(IMAGE_HELP+'\n复制到目录后点“刷新素材”，即可预览并选中。音频请在“语音与配对气泡”添加（WAV/MP3/OGG/FLAC/M4A/AAC）；字体在“字体与大小”页添加（TTF/OTF/TTC）。'); help_text.setWordWrap(True); gifbox.addWidget(help_text)
         self.library_status=QLabel(); self.library_status.setWordWrap(True); gifbox.addWidget(self.library_status)
         self.search=QLineEdit(); self.search.setPlaceholderText('搜索 GIF 名称，例如：摸头、思考、加班'); self.search.textChanged.connect(self.filter_gallery); gifbox.addWidget(self.search)
         self.gallery=QListWidget(); self.gallery.setViewMode(QListWidget.ViewMode.IconMode); self.gallery.setResizeMode(QListWidget.ResizeMode.Adjust); self.gallery.setMovement(QListWidget.Movement.Static); self.gallery.setIconSize(QSize(88,88)); self.gallery.setGridSize(QSize(142,148)); self.gallery.setWordWrap(True); self.gallery.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -64,7 +67,7 @@ class BindingEditor(QDialog):
             if f not in pet.font_families: families.append((f,f))
         bubble.addRow('这个状态的字体',self.guard('font_family',self.combo('font_family',families,editable=True)))
         bubble.addRow('这个状态的字号',self.number('font_size',0,40,1,' px',zero='跟随全局字号'))
-        helper=QLabel('气泡宽度可单独预览、拖边调整；桌宠缩放时按保存的比例同步变化。长文案自动换行，不限制行数。\n“自定义音频+字幕”只显示抽中语音的配对文案，播完收起；没有配对文案时不显示气泡。\n全局字体、额度条字号和设置面板字号在“外观、声音与迁移”中调整。'); helper.setWordWrap(True); bubble.addRow(helper)
+        helper=QLabel('气泡宽度可单独预览、拖边调整；桌宠缩放时按保存的比例同步变化。长文案自动换行，不限制行数。\n“自定义音频+字幕”只显示抽中语音的配对文案，播完收起；没有配对文案时不显示气泡。\n全局字体、额度条字号和设置面板字号在设置的“字体与大小”页中调整。'); helper.setWordWrap(True); bubble.addRow(helper)
         paired_button=QPushButton('为每条语音填写独立的配对气泡 →'); paired_button.clicked.connect(lambda:self.tabs.setCurrentIndex(3)); bubble.addRow(paired_button)
         voice=self.form_tab('语音与配对气泡')
         paired=QLabel('配对气泡请在“气泡与字体 → 气泡内容”选择“自定义音频+字幕”。'); paired.setWordWrap(True); voice.addRow(paired)
@@ -79,8 +82,11 @@ class BindingEditor(QDialog):
         voice.addRow('进入状态后延迟',self.number('audio_delay',0,60,.1,' 秒'))
         tip=QLabel('相对文件名从全局“音频目录”读取。支持 WAV、MP3、OGG、FLAC、M4A、AAC；实际播放取决于解码器。导出时会打包已绑定的有效音频。'); tip.setWordWrap(True); voice.addRow(tip)
         self.saved=QLabel(); right.addWidget(self.saved)
-        bottom=QHBoxLayout(); global_button=QPushButton('外观、声音与迁移'); global_button.clicked.connect(pet.open_preferences); bottom.addWidget(global_button)
-        bottom.addStretch(); save=QPushButton('立即保存全部配置'); save.clicked.connect(self.save_all); bottom.addWidget(save); done=QPushButton('完成'); done.clicked.connect(self.hide); bottom.addWidget(done); outer.addLayout(bottom)
+        bottom=QHBoxLayout()
+        if not embedded: global_button=QPushButton('打开设置'); global_button.clicked.connect(pet.open_preferences); bottom.addWidget(global_button)
+        bottom.addStretch(); save=QPushButton('立即保存全部配置'); save.clicked.connect(self.save_all); bottom.addWidget(save)
+        if not embedded: done=QPushButton('完成'); done.clicked.connect(self.hide); bottom.addWidget(done)
+        outer.addLayout(bottom)
         self.timer=QTimer(self); self.timer.setInterval(30); self.timer.timeout.connect(self.animate_preview)
         self.apply_style(); self.triggers.setCurrentRow(0)
 
