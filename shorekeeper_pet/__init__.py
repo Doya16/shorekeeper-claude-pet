@@ -1,0 +1,1 @@
+"""Shorekeeper Claude desktop companion."""
