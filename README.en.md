@@ -6,11 +6,11 @@ A customizable Windows companion for Claude Code: animated reactions to task pro
 
 ![Working, finished (bars), finished (rings)](docs/demo/overview.png)
 
-**v0.1.0 · Windows 10/11 x64.** Works with Code sessions in Claude Desktop and with terminal Claude Code. Ordinary chat and Cowork are not supported yet. Python is not required.
+**v0.1.1 · Windows 10/11 x64.** Works with Code sessions in Claude Desktop and with terminal Claude Code. Ordinary chat and Cowork are not supported yet. Python is not required.
 
 ## Start
 
-1. Extract `Shorekeeper-Claude-Windows-v0.1.0.zip` completely and run `守岸人Claude桌宠启动.exe`.
+1. Extract `Shorekeeper-Claude-Windows-v0.1.1.zip` completely and run `守岸人Claude桌宠启动.exe`.
 2. **Claude Desktop Code sessions need no setup.** Task state comes from local session transcripts; usage comes from the desktop app's local usage samples.
 3. For terminal Claude Code only: right-click the pet → **设置… → Claude 额度与提醒** and enable the terminal connection (hooks plus status line), then start a new session. Claude Code 2.1.295 or later is recommended.
 

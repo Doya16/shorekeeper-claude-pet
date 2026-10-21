@@ -1,4 +1,4 @@
-守岸人 Claude 桌宠 · v0.1.0
+守岸人 Claude 桌宠 · v0.1.1
 
 1. 完整解压 ZIP 到可写目录。
 2. 双击“守岸人Claude桌宠启动.exe”，无需安装 Python。

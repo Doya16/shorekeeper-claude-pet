@@ -1,4 +1,4 @@
-Shorekeeper Claude companion 0.1.0 preview - bundled components
+Shorekeeper Claude companion 0.1.1 - bundled components
 
 Python: Python Software Foundation License. https://www.python.org/
 PySide6 / Qt 6.11.2: LGPLv3 / GPLv3 / commercial licensing. https://www.qt.io/qt-for-python

@@ -12,7 +12,7 @@
 
 ## 开始使用
 
-1. 下载 **Shorekeeper-Claude-Windows-v0.1.0.zip**，完整解压到可写目录。
+1. 下载 **Shorekeeper-Claude-Windows-v0.1.1.zip**，完整解压到可写目录。
 2. 双击 **守岸人Claude桌宠启动.exe**。
 3. **Claude 桌面版的 Code 会话无需任何设置**：任务状态读取本机会话记录，额度读取桌面版写在本机的用量记录。
 4. 只用 **终端 Claude Code** 时：右键桌宠 → **设置… → Claude 额度与提醒**，勾选 **终端 Claude Code：安装任务事件与额度状态栏**，然后重新打开终端会话（建议 Claude Code 2.1.295 或更高版本）。
@@ -89,7 +89,14 @@ Ctrl + 滚轮缩放桌宠；拖动气泡或额度框左右边缘调整宽度。G
 
 修改自动保存在 `settings.json`。在 **设置… → 保存与迁移** 中可以导出配置快照、配置与素材包（GIF、气泡文案、配对字幕、音频、字体与设置），或包含运行程序的 Windows 便携完整包。迁移包不包含 Claude 账号凭据、聊天记录或额度缓存。Codex / DeepSeek 版的配置与素材 ZIP 也可以导入。
 
-每次启动可在后台检查 GitHub 正式版本（默认关闭，可在 **版本与更新** 开启）。更新提醒不会自动下载或覆盖本地配置。升级时把新版本解压到新目录，再导入自己的配置与素材包。
+每次启动可在后台检查 GitHub 正式版本（默认关闭，可在 **版本与更新** 开启）。更新提醒不会自动下载或覆盖本地配置。按当前版本选择下载方式：
+
+| 当前情况 | 如何更新 |
+| --- | --- |
+| 已有 v0.1.0 | 下载 [v0.1.1 程序补丁](https://github.com/Doya16/shorekeeper-claude-pet/releases/download/v0.1.1/Shorekeeper-Claude-Update-Patch-v0.1.1.zip)，退出桌宠，解压到原目录并覆盖同名文件，然后重新启动 |
+| 首次使用 | 下载 [v0.1.1 完整包](https://github.com/Doya16/shorekeeper-claude-pet/releases/download/v0.1.1/Shorekeeper-Claude-Windows-v0.1.1.zip)，解压到新目录 |
+
+程序补丁只更新程序文件，保留 GIF、音频、气泡字幕、字体和个人设置。更新前可在 **保存与迁移 → 导出配置与素材包（ZIP）** 留一份备份。
 
 ## 从源码运行
 
