@@ -153,6 +153,20 @@ def source_lines(data):
     return lines
 
 
+def refresh_note(data, now=None):
+    """Feedback for a manual refresh: what was read and when it can change."""
+    now = time.time() if now is None else now
+    if not data.get('updated_at') or not data.get('windows'):
+        return '没有读到额度：桌面版用量记录和终端状态栏都还没有数据。'
+    taken = stamp(data['updated_at'], '%H:%M')
+    if data.get('source') == 'desktop':
+        # The desktop app samples on a fixed cadence; reading sooner cannot help.
+        upcoming = data['updated_at']+900
+        when = f"下次约 {stamp(upcoming, '%H:%M')}" if upcoming > now else '桌面版下次采样后自动更新'
+        return f"已重读：{' / '.join(row.label for row in quota_rows(data, now))}\n这是桌面版 {taken} 的采样，约每 15 分钟一次，{when}。"
+    return f"已重读：{' / '.join(row.label for row in quota_rows(data, now))}\n这是状态栏 {taken} 的数据，Claude Code 每次回复后更新。"
+
+
 def quota_brief(data, now=None):
     """Hover lines: only what the status bar itself cannot show."""
     now = time.time() if now is None else now

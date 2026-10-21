@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse, collections, json, math, os, pathlib, random, sys, threading, time
 from datetime import datetime
 from PIL import Image
-from PySide6.QtCore import Qt, QTimer, QRectF, QPoint, QSize, Signal, QObject, QLockFile
+from PySide6.QtCore import Qt, QTimer, QRect, QRectF, QPoint, QSize, Signal, QObject, QLockFile
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QFont, QImage, QPixmap, QIcon, QAction, QCursor
-from PySide6.QtWidgets import QApplication, QWidget, QMenu, QSystemTrayIcon, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QCheckBox, QGroupBox, QListWidget, QAbstractItemView,QScrollArea
+from PySide6.QtWidgets import QApplication, QToolTip, QWidget, QMenu, QSystemTrayIcon, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QCheckBox, QGroupBox, QListWidget, QAbstractItemView,QScrollArea
 from .bridge import Monitor, RateClient, ROOT
 from .bindings import BindingMap,PlaybackController,MANUAL,playback_seconds
 from .studio import BindingEditor
@@ -22,7 +22,7 @@ from .presentation_size import EdgeResize
 from .media_library import load_catalog
 from .presets import load_defaults,default_bindings
 from .update_ui import UpdateController
-from .quota import quota_view,quota_label,quota_brief,quota_items,refresh_seconds
+from .quota import quota_view,quota_label,quota_brief,quota_items,refresh_note,refresh_seconds
 
 SETTINGS=ROOT/'settings.json'
 STATES={
@@ -64,6 +64,7 @@ def request_text(request,now=None):
     """One line answering: is my latest request finished?"""
     if not request: return ''
     now=time.time() if now is None else now
+    if request.get('state')=='awaiting': return '处理中 · 等后台任务'
     if not request.get('ended'): return '处理中 · '+duration_text(now-request.get('started',now))
     label=REQUEST_LABELS.get(request.get('state'),'已结束')
     return f"{label} · {datetime.fromtimestamp(request['ended']).strftime('%H:%M')}"
@@ -241,7 +242,7 @@ class Pet(PetRenderer,QWidget):
             self.refresh_event.wait(interval)
 
     def refresh_quota(self):
-        self.refresh_event.set()
+        self.refresh_requested=True; self.refresh_event.set()
         self.bubble_until=time.monotonic()+10
 
     def on_status(self, status):
@@ -267,9 +268,13 @@ class Pet(PetRenderer,QWidget):
 
     def on_quota(self, quota):
         # A slow cache read must never replace a newer live response.
-        if quota.get('updated_at',0) and quota.get('updated_at',0)<self.quota_data.get('updated_at',0): return
-        if 'windows' in quota: self.quota_data=quota
-        else: self.quota_data.update(quota)
+        if not (quota.get('updated_at',0) and quota.get('updated_at',0)<self.quota_data.get('updated_at',0)):
+            if 'windows' in quota: self.quota_data=quota
+            else: self.quota_data.update(quota)
+        if getattr(self,'refresh_requested',False):
+            # A manual refresh always answers, even when nothing new arrived.
+            self.refresh_requested=False
+            if self.isVisible(): QToolTip.showText(self.mapToGlobal(self.quota_hit_rect().topLeft().toPoint()),refresh_note(self.quota_data),self,QRect(),6000)
         if self.preferences and self.preferences.isVisible(): self.preferences.refresh_quota_status()
         self.update()
         self.update_layout()
@@ -327,15 +332,28 @@ class Pet(PetRenderer,QWidget):
     def tooltip_text(self):
         return '\n'.join(self.request_lines()+quota_brief(self.quota_data))
 
-    def request_lines(self):
+    def open_requests(self):
+        """(requests still being handled in any project, latest finished one)."""
         status=self.live_status; request=status.get('request')
-        if request:
+        if 'requests' in status: return status['requests'],status.get('latest')
+        if request and not request.get('ended'): return [request],None
+        return [],request
+
+    def request_summary(self):
+        running,latest=self.open_requests()
+        if len(running)>1: return f'{len(running)} 个处理中'
+        return request_text(running[0] if running else latest)
+
+    def request_lines(self):
+        running,latest=self.open_requests(); lines=[]
+        for request in running or ([latest] if latest else []):
             title=request.get('title') or 'Claude'
             if len(title)>22: title=title[:21]+'…'
             line=f'{title} · {request_text(request)}'
             if request.get('ended') and request.get('started'): line+=f" · 用时 {duration_text(request['ended']-request['started'])}"
-        else: line='还没有你发出的需求'
-        lines=[line]; count=status.get('background_count',0)
+            lines.append(line)
+        if not lines: lines.append('还没有你发出的需求')
+        count=self.live_status.get('background_count',0)
         if count: lines.append(f"后台 {count} 个会话运行中（{BACKGROUND_LABELS[self.options['background_turns']]}）")
         return lines
 
@@ -345,8 +363,8 @@ class Pet(PetRenderer,QWidget):
 
     def status_content(self):
         """(request pill text or None, quota items) for the bottom status panel."""
-        request=self.live_status.get('request')
-        pill='需求：'+request_text(request) if request and self.options['status_show_request'] else None
+        summary=self.request_summary()
+        pill='需求：'+summary if summary and self.options['status_show_request'] else None
         return pill,quota_items(self.quota_data,self.quota_visibility())
 
     def bubble_text(self):
@@ -369,7 +387,7 @@ class Pet(PetRenderer,QWidget):
 
     def format_bubble(self,text):
         context=self.notification or self.live_status
-        for key,value in {'state':self.state_title(self.bubble_state()),'quota':self.quota_label(),'task':context.get('title',''),'progress':context.get('message',''),'request':request_text(self.live_status.get('request'))}.items(): text=text.replace('{'+key+'}',value)
+        for key,value in {'state':self.state_title(self.bubble_state()),'quota':self.quota_label(),'task':context.get('title',''),'progress':context.get('message',''),'request':self.request_summary()}.items(): text=text.replace('{'+key+'}',value)
         return text
 
     def mousePressEvent(self, event):
@@ -596,7 +614,7 @@ class Pet(PetRenderer,QWidget):
         data=dict(version=VERSION,pid=os.getpid(),updated_at=time.time(),state=self.state,visible=self.isVisible(),quota_source=self.quota_data.get('source'),quota_updated_at=self.quota_data.get('updated_at'),quota_available=bool(self.quota_data.get('windows')),rate_error=self.quota_data.get('error'),thread_count=len(self.thread_list),animation=self.animation_id,custom_bindings=len(self.bindings.overrides),font=self.options['bubble_font_family'])
         data.update(update_status=self.updates.status,update_check_pending=self.updates.busy)
         data.update(quota_mode=quota_view(self.quota_data).mode,quota_label=self.quota_label(compact=True))
-        data.update(background_turns=self.options['background_turns'],background_count=self.live_status.get('background_count',0),request=request_text(self.live_status.get('request')))
+        data.update(background_turns=self.options['background_turns'],background_count=self.live_status.get('background_count',0),request=self.request_summary())
         data.update(follow=self.monitor.selected,thread_id=self.live_status.get('thread_id'),live_state=self.live_status.get('state'),owner=self.controller.owner,scale=self.requested_scale,display_scale=self.scale_factor,window_size=[self.width(),self.height()])
         try:
             (ROOT/'runtime.json').write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')

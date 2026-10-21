@@ -60,6 +60,16 @@ class PanelWidgetTests(unittest.TestCase):
         self.assertEqual(p.options['quota_style'],'rings');preview.grab()
         preview.sample=True;self.assertEqual([i['key'] for i in preview.content()[1]],['five_hour','seven_day','fable'])
 
+    def test_pill_counts_every_open_request(self):
+        p=self.pet;now=time.time()
+        a=dict(state='thinking',started=now-60,ended=0,title='A');b=dict(state='awaiting',started=now-30,ended=0,title='B')
+        p.live_status=dict(requests=[a,b],latest=None);self.assertEqual(p.status_content()[0],'需求：2 个处理中')
+        self.assertEqual(len(p.request_lines()),2);self.assertIn('等后台任务',p.request_lines()[1])
+        p.live_status=dict(requests=[a],latest=dict(state='done',started=now-90,ended=now-5,title='B'))
+        self.assertTrue(p.status_content()[0].startswith('需求：处理中'))
+        p.live_status=dict(requests=[],latest=dict(state='done',started=now-90,ended=now-5,title='B'))
+        self.assertTrue(p.status_content()[0].startswith('需求：已完成'))
+
     def test_context_menu_keeps_settings_in_one_entry(self):
         menu=self.pet.context_menu()
         names=[a.text() for a in menu.actions() if a.text() and a.isEnabled()]

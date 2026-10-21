@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import shutil
 import time
 from datetime import datetime
@@ -13,6 +14,14 @@ from .quota import quota_from_status, quota_from_desktop
 # How turns Claude starts by itself (task results, schedules, side sessions)
 # are presented: not at all, animation only, or like a typed request.
 BACKGROUND_MODES = ('silent', 'animate', 'full')
+# A finished turn that left background commands running has not finished the
+# request; Claude resumes when their results arrive. Servers and watchers
+# never finish, so they are not waited for.
+SERVICE = re.compile(r'(?i)http\.server|\bserve[rs]?\b|\bdev\b|--watch|\bwatch\b|tail\s+-f|uvicorn|gunicorn|'
+                     r'flask\s+run|vite|webpack|nodemon|live-server|\bpreview\b|\blisten|port\s+\d+')
+NOTIFICATION = re.compile(r'<task-id>([^<\s]+)</task-id>.*?<status>(\w+)</status>', re.S)
+# With no activity for this long, a waiting request is treated as finished.
+WAIT_LIMIT = 1800
 
 
 def timestamp(value):
@@ -173,10 +182,21 @@ class SessionReader:
         # The person's most recent request and when it last made progress.
         self.request = None
         self.request_event = 0.0
+        # Background commands started for the request: task id -> start time.
+        self.waiting_on = {}
+        self.launches = {}
+        # A background turn resuming a request that is waiting on results.
+        self.continuation = False
 
     @property
     def title(self):
         return self.custom_title or self.project or 'Claude Code'
+
+    def awaiting(self):
+        return bool(self.request and self.request.get('state') == 'awaiting')
+
+    def in_progress(self):
+        return bool(self.request and not self.request.get('ended'))
 
     def start(self, when, turn_id=None, background=False):
         # A background result delivered while the person's own request is
@@ -189,23 +209,49 @@ class SessionReader:
             self.tools.clear()
         self.active = True
         self.background = background
+        self.continuation = background and self.awaiting()
         self.ended = 0
         self.state = 'thinking'
         if not background:
+            # A new request supersedes one still waiting on old commands.
+            self.waiting_on.clear()
             self.request = dict(state='thinking', turn_id=self.turn_id, started=self.started, ended=0)
             self.request_event = max(self.request_event, when)
+
+    def finish_request(self, state, when, announce=True):
+        request = self.request
+        key = request['turn_id'] or request['started']
+        if announce and key not in self.terminal_seen:
+            self.terminal_seen.add(key)
+            self.events.append(dict(state=state, turn_id=request['turn_id'], started=request['started'], ended=when,
+                                    background=False))
+        self.request = dict(state=state, turn_id=request['turn_id'], started=request['started'], ended=when)
+        self.request_event = max(self.request_event, when)
+        self.waiting_on.clear()
 
     def terminal(self, state, when):
         if not self.started or not self.active:
             return
-        key = self.turn_id or self.started
-        if key not in self.terminal_seen:
-            self.terminal_seen.add(key)
-            self.events.append(dict(state=state, turn_id=self.turn_id, started=self.started, ended=when,
-                                    background=self.background))
         if not self.background:
-            self.request = dict(state=state, turn_id=self.turn_id, started=self.started, ended=when)
-            self.request_event = max(self.request_event, when)
+            self.request = dict(self.request or {}, turn_id=self.turn_id, started=self.started)
+            if state == 'done' and self.waiting_on:
+                # Replied, but its own background commands are still running.
+                self.request.update(state='awaiting', ended=0, last=when)
+                self.request_event = max(self.request_event, when)
+            else:
+                self.finish_request(state, when)
+        elif self.continuation:
+            if state != 'done' or not self.waiting_on:
+                self.finish_request(state, when)
+            else:
+                self.request['last'] = when
+        else:
+            key = self.turn_id or self.started
+            if key not in self.terminal_seen:
+                self.terminal_seen.add(key)
+                self.events.append(dict(state=state, turn_id=self.turn_id, started=self.started, ended=when,
+                                        background=True))
+        self.continuation = False
         self.active = False
         self.ended = when
         self.state = state
@@ -230,8 +276,26 @@ class SessionReader:
 
     def touch(self, when):
         self.last_event = max(self.last_event, when)
-        if self.active and not self.background:
+        if self.active and (not self.background or self.continuation):
             self.request_event = max(self.request_event, when)
+
+    def task_results(self, obj):
+        """Background command results, wherever Claude recorded them: their own
+        turn, a queued prompt, or an attachment delivered mid-turn."""
+        texts = [obj.get('content'), (obj.get('attachment') or {}).get('prompt') if isinstance(obj.get('attachment'), dict) else None]
+        content = (obj.get('message') or {}).get('content') if isinstance(obj.get('message'), dict) else None
+        texts += [content] if isinstance(content, str) else [b.get('text') for b in content or [] if isinstance(b, dict)]
+        for text in texts:
+            if isinstance(text, str) and '<task-notification>' in text:
+                for task, status in NOTIFICATION.findall(text):
+                    if status.lower() != 'running':
+                        self.waiting_on.pop(task, None)
+
+    def expire(self, now):
+        """A request waiting far too long on a command most likely left a
+        long-lived process behind; settle it quietly."""
+        if self.awaiting() and not self.active and now-self.last_event > WAIT_LIMIT:
+            self.finish_request('done', self.request.get('last', self.last_event), announce=False)
 
     def accept_hook(self, item):
         when = item.get('at', 0)
@@ -280,6 +344,8 @@ class SessionReader:
             return
         if not self.project and isinstance(obj.get('cwd'), str):
             self.project = pathlib.PureWindowsPath(obj['cwd']).name[:80]
+        if self.waiting_on:
+            self.task_results(obj)
         when = timestamp(obj.get('timestamp'))
         if not when or when <= self.last_hook:
             return
@@ -297,7 +363,11 @@ class SessionReader:
         if kind == 'user':
             results = [b for b in blocks if isinstance(b, dict) and b.get('type') == 'tool_result']
             if results:
+                launched = obj.get('toolUseResult') if isinstance(obj.get('toolUseResult'), dict) else {}
                 for result in results:
+                    if self.launches.pop(result.get('tool_use_id'), None) and isinstance(launched.get('backgroundTaskId'), str) \
+                            and self.request and (self.active and (not self.background or self.continuation)):
+                        self.waiting_on[launched['backgroundTaskId']] = when
                     name = self.tools.pop(result.get('tool_use_id'), '')
                     if name.endswith('__wrap_up') and not result.get('is_error'):
                         self.terminal('done', when)
@@ -312,6 +382,9 @@ class SessionReader:
             tools = [b for b in blocks if isinstance(b, dict) and b.get('type') == 'tool_use']
             for tool in tools:
                 self.tool_started(tool.get('id'), tool.get('name', ''))
+                given = tool.get('input') if isinstance(tool.get('input'), dict) else {}
+                if given.get('run_in_background') and not SERVICE.search(f"{given.get('command', '')} {given.get('description', '')}"):
+                    self.launches[tool.get('id')] = True
             if message.get('stop_reason') in ('end_turn', 'stop_sequence'):
                 self.terminal('done', when)
             elif not tools:
@@ -370,6 +443,7 @@ class Monitor:
         self.last_discovery = 0
         self.selected = 'auto'
         self.background_mode = 'silent'
+        self.followed = None
         self.error = None
         self.observe_since = time.time()
         self.seen_files = set()
@@ -418,41 +492,65 @@ class Monitor:
                     continue
                 events.append(dict(event, thread_id=sid, title=reader.title))
         events.sort(key=lambda event: event['ended'])
+        for reader in self.readers.values():
+            reader.expire(now)
         recent = sorted(self.readers, key=lambda sid: self.readers[sid].last_event, reverse=True)
-        keep = set(recent[:64]) | {sid for sid, reader in self.readers.items() if reader.active} | {self.selected}
+        keep = set(recent[:64]) | {sid for sid, reader in self.readers.items() if reader.active or reader.in_progress()} | {self.selected}
         self.readers = {sid: reader for sid, reader in self.readers.items() if sid in keep}
         self.threads = [dict(id=sid, title=f'{reader.title} · {sid[:6]}') for sid, reader in self.readers.items()]
 
-        def running(reader, background):
-            return reader.active and reader.background == background and now-reader.last_event < 600
-        background_count = sum(1 for reader in self.readers.values() if running(reader, True))
+        def working(reader):
+            """Handling one of the person's requests, or waiting on its commands."""
+            return reader.awaiting() or (reader.in_progress() and now-reader.last_event < WAIT_LIMIT)
+
+        def chatter(reader):
+            """A turn Claude started by itself that belongs to no request."""
+            return reader.active and reader.background and not reader.continuation and now-reader.last_event < 600
+        background_count = sum(1 for reader in self.readers.values() if chatter(reader))
+        # Every project's open request, so one finishing never hides another.
+        requests = sorted((dict(reader.request, title=reader.title, thread_id=sid)
+                           for sid, reader in self.readers.items() if working(reader)), key=lambda r: r['started'])
+        finished = [reader for reader in self.readers.values() if reader.request and reader.request.get('ended')]
+        latest = max(finished, key=lambda reader: reader.request['ended'], default=None)
+        latest = dict(latest.request, title=latest.title) if latest else None
+        common = dict(events=events, background_count=background_count, requests=requests, latest=latest)
         chosen = self.selected if self.selected in self.readers else None
         if self.selected == 'auto' and self.readers:
-            active = [sid for sid, reader in self.readers.items()
-                      if running(reader, False) or (mode != 'silent' and running(reader, True))]
-            # Otherwise stay with the conversation the person last asked something in.
-            chosen = max(active, key=lambda sid: self.readers[sid].last_event) if active else \
-                max(self.readers, key=lambda sid: (self.readers[sid].request_event, self.readers[sid].last_event))
+            busy = [sid for sid, reader in self.readers.items()
+                    if working(reader) or (mode != 'silent' and chatter(reader))]
+            # Stay with the project being followed until its request is done,
+            # instead of jumping to whichever session wrote last.
+            if self.followed in busy:
+                chosen = self.followed
+            elif busy:
+                chosen = max(busy, key=lambda sid: self.readers[sid].last_event)
+            else:
+                chosen = max(self.readers, key=lambda sid: (self.readers[sid].request_event, self.readers[sid].last_event))
+            self.followed = chosen
         if not chosen:
             return dict(state='idle', message=self.error or '', title='', thread_id=None, stale=False, revision=0,
-                        events=events, background_count=background_count, request=None)
+                        request=None, **common)
         reader = self.readers[chosen]
         request = dict(reader.request, title=reader.title) if reader.request else None
-        if reader.active and reader.background and mode == 'silent':
+        last = reader.request or {}
+        if reader.awaiting() and not reader.active:
+            # The reply is in, but its commands still run: busy, not finished.
+            return dict(state='working', message='', title=reader.title, thread_id=chosen, turn_id=last.get('turn_id'),
+                        stale=False, revision=reader.revision, last_event=reader.last_event, active=True,
+                        background=True, age=now-reader.last_event, started=last.get('started', 0), ended=0,
+                        request=request, **common)
+        if chatter(reader) and mode == 'silent':
             # Present the session as it was after the person's last request.
-            last = reader.request or {}
-            age = now-(reader.request_event or reader.last_event)
             return dict(state='idle', message='', title=reader.title, thread_id=chosen, turn_id=last.get('turn_id'),
                         stale=False, revision=reader.revision, last_event=reader.request_event, active=False,
-                        background=False, age=age, started=last.get('started', 0), ended=last.get('ended', 0),
-                        events=events, background_count=background_count, request=request)
+                        background=False, age=now-(reader.request_event or reader.last_event),
+                        started=last.get('started', 0), ended=last.get('ended', 0), request=request, **common)
         age = now-reader.last_event
         stale = reader.active and age > 180
         return dict(state='unknown' if stale else reader.display_state(now), message='', title=reader.title,
                     thread_id=chosen, turn_id=reader.turn_id, stale=stale, revision=reader.revision,
                     last_event=reader.last_event, active=reader.active, background=reader.active and reader.background,
-                    age=age, started=reader.started, ended=reader.ended, events=events,
-                    background_count=background_count, request=request)
+                    age=age, started=reader.started, ended=reader.ended, request=request, **common)
 
     def cached_rate(self):
         return None

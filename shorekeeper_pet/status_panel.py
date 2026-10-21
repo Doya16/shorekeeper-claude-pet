@@ -16,7 +16,7 @@ GAP=5
 
 def request_palette(text):
     if '出错' in text: return dict(line='#a67125',fill='#fff4de',ink='#744d13')
-    if '处理中' in text: return dict(line='#6788b4',fill='#eef3ff',ink='#3e5f92')
+    if '处理中' in text: return dict(line='#6788b4',fill='#eef3ff',ink='#3e5f92')  # also "N 个处理中"
     return dict(line='#5f9a6e',fill='#e6f6ea',ink='#356b45')
 
 def value_text(item):
